@@ -1,4 +1,6 @@
 //Gus to paste her code here
+
+
 public class StockTriggerHandler {
     
    private integer BatchSize = 0;
@@ -370,4 +372,112 @@ public class StockHandlerInsertDupeTest {
     }
    
 }
+}
+Other version of StockItemHandler
+public class V1StockTriggerHandler {
+    
+   private integer BatchSize = 0;
+   //private Static Integer NoRecursive = 1;
+    
+    public V1StockTriggerHandler (integer size){
+    BatchSize = size;
+   }
+    // Pass in Trigger.new
+    public List <Stock_Item__c> InsStock = null;
+    public void OnBeforeInsert(List <Stock_item__c> StockList) {
+        InsStock = StockList;
+    
+    //Make list to put stuff in that the loop processes
+    List<Stock_Item__c> done = new List <Stock_Item__c>();
+    List<Stock_Item__c> match = new List <Stock_Item__c>();
+   
+    
+        
+        
+    // check for Stock Item already there and put in CurrentStock  
+     List <stock_item__c> CurrentStock =  [ Select ID, Item_Name__c
+                                          		FROM stock_Item__c
+                                          		];
+      
+    for (Stock_Item__c newStock : InsStock){
+        
+        // Was going to only check if there is a name - but name should prob be required anyho..?) 
+       // if (newStock.Item_Name__c != Null) {
+               
+       //Only do next bit id there are dupes - if there is anything in the dupeStockList
+           
+					if (CurrentStock.size() >0){
+                	// For every Stock Item pulled out of the database that we are trying to insert a duplicate of
+               	 	for(stock_item__c d: CurrentStock){
+                        
+                        //match with the new items that are dupes
+                        if (newStock.Item_Name__c == d.Item_Name__c){
+                                                   
+                         //Add Duplicate Item to the new item name
+        				 newStock.Item_Name__c  = d.Item_Name__c + '- Duplicate Item';
+              			
+                        //System.debug(newStock);
+          			 	 
+                        } 
+       
+            }
+           
+         }
+		done.add(newStock);
+       }  
+    } 
+    
+    
+	public void OnAfterInsert(List < Stock_Item__c > StockItemsToAddAfter){
+        
+    }
+    
+    
+    public void OnBeforeUpdate(List < Stock_Item__c > oldStock, List < Stock_Item__c > updatedStock, Map<ID, Stock_Item__c> updatedStockMap, Map<ID, Stock_Item__c> oldstockMap){
+
+	}
+	
+	//When an account is updated to move from a low or standard priority to high or highest, 
+	//If there is no open opportunity for that account, create one.
+	public void OnAfterUpdate(List < Stock_Item__c > oldStock, List < Stock_Item__c > updatedStock, Map<ID, Stock_Item__c> updatedStockMap, Map<ID, Stock_Item__c> oldStockMap){
+		
+	}
+    
+    
+    public void OnBeforeDelete(List < Stock_Item__c > StockItemsToDelete, Map<ID, Stock_Item__c> deletedStockItemMap){
+		
+	}
+	
+	public void OnAfterDelete(List < Stock_Item__c > deletedStockItems, Map<ID, Stock_Item__c> deletedStockItemMap){
+        List <Case> caseOwners = new List <Case>();
+        List <Case> caseAdd = new List <Case>();
+        List <Case> deletedCasesAlert = new List <Case>();
+        //Set<User> usr = new Set <User>();
+        Map< String, User> UsrIds = new Map <String, User>();
+        
+        for (Stock_Item__c s: deletedStockItems) {
+			Case c = new Case();
+			c.Status = 'New';
+            c.Priority ='High';
+			c.Origin = 'Internal'; //Make sure you've added this as a picklist value for this field
+            c.Reason = 'Stock Item Deleted'; //Make sure you've added this as a picklist value for this field
+			c.Subject = 'Stock Item Deleted With Stock On hand!';
+            c.OwnerID = s.LastModifiedById;
+		
+			c.Description = ('Stock Item Deleted With Stock On Hand!' +
+                            ' / Stock Item Deleted, ID:' + s.Id +
+                            ' / Stock On Hand:' + s.Stock_on_Hand__c + 
+                            ' / Deleted By:' + s.LastModifiedById);
+			caseAdd.add(c);                          
+			
+            
+            
+        }
+    insert caseAdd;     
+		
+   }
+	
+	public void OnUndelete(List < Stock_Item__c > restoredStockItems){
+		
+	}
 }
