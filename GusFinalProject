@@ -1,1 +1,373 @@
 //Gus to paste her code here
+public class StockTriggerHandler {
+    
+   private integer BatchSize = 0;
+   //private Static Integer NoRecursive = 1;
+    
+    public StockTriggerHandler (integer size){
+    BatchSize = size;
+    }
+    
+   // Set class variable to null
+    public List <Stock_Item__c> insStock = null;
+    
+    // Pass in Trigger.new 
+    public void OnBeforeInsert(List <Stock_item__c> stockList) {
+        insStock = stockList;
+
+    	// Make map to hold stock, use string for Item_Name__c
+    	
+    	Map<String, Stock_Item__c> stockMap = new Map<String, Stock_Item__c>();
+       //Somewhere in here need to make Item__Name_c proper case
+       //stk.Item_Name__c = stk.Item_Name__c.lowercase();
+	   //stk.Item_Name__c = stk.Item_Name__c.capitalise();
+       
+    	List<Stock_Item__c> collectStock = new List <Stock_Item__c>();
+        
+        // 2 more lists to try to throw and catch the exception and return it to user - not using, couldnt get it to work
+        List<Stock_Item__c> renamedStock = new List <Stock_Item__c>();
+        List<Stock_Item__c> done = new List <Stock_Item__c>();
+    	
+        // Loop through trigger.new stock, now inStock
+        for (Stock_Item__c stk : insStock){
+            
+           
+           
+            // Make sure another new Stock isn't also a duplicate 
+            if (stockMap.containsKey(stk.Item_Name__c)){
+                       
+               // stk.Item_Name__c.addError('Another new Stock Item has the '
+               //                     +'same Item_Name__c .');
+                collectStock.add(stk);
+            }else{
+                // Put the trigger.new item into the stockmap
+                stockMap.put(stk.Item_Name__c, stk);
+            }
+         }
+	
+         /* Using a single database query, find all the Stock Items in 
+          * the database that have the same Item_Name__c as any 
+          * of the Stock being inserted. 
+	      */  
+        for (Stock_Item__c matchStock : [SELECT Item_Name__c FROM Stock_Item__c
+                     					 WHERE Item_Name__c IN :StockMap.KeySet()]){
+                          
+       			Stock_Item__c dupeStock = StockMap.get(matchStock.Item_Name__c);
+        		//dupeStock.Item_Name__c.addError('Duplicate Item');
+                collectStock.add(dupeStock);             
+         }
+         //System.debug(collectStock); 
+         
+         for (Stock_Item__c s: collectStock){
+               // Try{  
+                    s.Item_Name__c  = s.Item_Name__c + '- Duplicate Item';
+             renamedStock.add(s); 
+         }
+                
+                  /* 
+                   *  s.Item_Name__c.addError('Duplicate Item');
+                    throw new RadException();
+                   
+                }Catch (RadException r){
+                    database.insert(renamedStock, false);//'Duplicate Item'
+                }
+                */
+                
+         
+    }
+
+
+    
+	public void OnAfterInsert(List < Stock_Item__c > StockItemsToAddAfter){
+        
+    }
+    
+    
+    public void OnBeforeUpdate(List < Stock_Item__c > oldStock, List < Stock_Item__c > updatedStock, Map<ID, Stock_Item__c> updatedStockMap, Map<ID, Stock_Item__c> oldstockMap){
+
+	}
+	
+	//When an account is updated to move from a low or standard priority to high or highest, 
+	//If there is no open opportunity for that account, create one.
+	public void OnAfterUpdate(List < Stock_Item__c > oldStock, List < Stock_Item__c > updatedStock, Map<ID, Stock_Item__c> updatedStockMap, Map<ID, Stock_Item__c> oldStockMap){
+		
+	}
+    
+    
+    public void OnBeforeDelete(List < Stock_Item__c > StockItemsToDelete, Map<ID, Stock_Item__c> deletedStockItemMap){
+		
+	}
+	
+	public void OnAfterDelete(List < Stock_Item__c > deletedStockItems, Map<ID, Stock_Item__c> deletedStockItemMap){
+        List <Case> caseOwners = new List <Case>();
+        List <Case> caseAdd = new List <Case>();
+        List <Case> deletedCasesAlert = new List <Case>();
+        //Set<User> usr = new Set <User>();
+        Map< String, User> UsrIds = new Map <String, User>();
+        
+        for (Stock_Item__c s: deletedStockItems) {
+			Case c = new Case();
+			c.Status = 'New';
+            c.Priority ='High';
+			c.Origin = 'Internal'; //Make sure you've added this as a picklist value for this field
+            c.Reason = 'Stock Item Deleted'; //Make sure you've added this as a picklist value for this field
+			c.Subject = 'Stock Item Deleted With Stock On hand!';
+            c.OwnerID = s.LastModifiedById;
+		
+			c.Description = ('Stock Item Deleted With Stock On Hand!' +
+                            ' / Stock Item Deleted, ID:' + s.Id +
+                            ' / Stock On Hand:' + s.Stock_on_Hand__c + 
+                            ' / Deleted By:' + s.LastModifiedById);
+			caseAdd.add(c);                          
+			
+            
+            
+        }
+    insert caseAdd;     
+		
+   }
+	
+	public void OnUndelete(List < Stock_Item__c > restoredStockItems){
+		
+	}
+	
+	public class StockUtility {
+ 
+    private list <stock_item__c> lowStock = null;
+    // add no recursion boolean
+   
+    
+    public StockUtility(list <stock_item__c> stockCount) {
+	lowStock = stockCount;
+       
+    } 
+    
+    
+  public static list<stock_item__c> getLowStockItems(){
+ 		//Integer lev = (Minimum_Stock_Level__c - Stock_on_Hand__c);
+        list<stock_item__c>  lowStock = new list<stock_item__c> ();
+        list<stock_item__c> checkStock = [SELECT ID, Item_Name__c, Item_Stock_is_Low__c, Minimum_Stock_Level__c, Stock_on_Hand__c
+                                         FROM stock_item__c
+                                         WHERE (Item_Stock_is_Low__c = true)];
+   //System.debug(checkstock);  
+   return checkStock;
+   }
+    
+   //I need to masss delete some dupes that have same name! 
+   public static void  deleteStockItems(){
+       
+       //Integer lev = (Minimum_Stock_Level__c - Stock_on_Hand__c);
+       list<stock_item__c>  lowStock = new list<stock_item__c> ();
+       list<stock_item__c> deleteStock = [SELECT ID, Item_Name__c, Item_Stock_is_Low__c, Minimum_Stock_Level__c, Stock_on_Hand__c
+                                         FROM stock_item__c];
+   //System.debug(checkstock);  
+   delete deleteStock;
+   }
+    
+     
+    //I need to masss delete cases!!! 
+   public static void  deleteCases(){
+    	
+       list<Case>  c = new list<case> ();
+       list<case> deleteC = [SELECT ID 
+                             FROM Case];
+   //System.debug(checkstock);  
+   delete deleteC;
+   }
+    /*
+    
+
+
+    public static void main() {
+        try {
+            insertNewStock();
+            //Should this be called RAD Exception or Stock?
+        } catch(RadException me) {
+            System.debug('Message: ' + me.getMessage());    
+            System.debug('Cause: ' + me.getCause());    
+            System.debug('Line number: ' + me.getLineNumber());    
+            System.debug('Stack trace: ' + me.getStackTraceString());    
+        }
+    }
+    
+    public static void insertNewStock() {
+        try {
+            // Insert Stcok without required fields
+            // Add no duplicate name insertion. 
+            // Should this be in my triiger method in stead of the renaming code?
+            Stock_Item__c s = new Stock_Item__c();
+            insert s;
+        } catch(DmlException e) {
+            // duplicate nameprevents the insertion
+            // so throw more specific exception.
+            
+            throw new RadException(
+                'Duplicate Stock item could not be inserted.', e);
+        }
+    } */
+}
+
+File
+
+Edit
+
+Debug
+
+Test
+
+Workspace
+
+Help
+
+<
+
+>
+
+MakeStockFactory.apxc
+
+StockUtility.apxc
+
+StockItemTrigger.apxt
+
+WeekThreeClassExercises.apxc
+
+StockHandlerDelete_Test.apxc
+
+GetStock_Test.apxc
+
+StockHandlerInsertDupeTest.apxc
+
+Test_DataFactory.apxc
+
+StockTriggerHandler.apxc
+
+Code Coverage: None
+API Version:
+
+36
+
+Go To
+
+1
+//@isTest
+2
+public class Test_DataFactory {
+3
+    
+4
+ 
+5
+     public static List<Stock_Item__c> TestMakeStock(Integer numToAdd) {
+6
+        List<Stock_Item__c> stkListTest = new List<Stock_Item__c>();
+7
+        for (Integer i=0; i<numToAdd; i++) {
+8
+            Stock_Item__c stk = new Stock_Item__c(   Description__c ='food' + i,
+9
+                                                     Item_Name__c = 'Food' + i,
+10
+                                                     List_Price__c = 1.99 + i,
+11
+                                                     Minimum_Stock_Level__c = 3,
+12
+                                                     Stock_On_Hand__c = 1 + i);
+13
+            //System.debug(stk);
+14
+            stkListTest.add(stk); 
+15
+            
+16
+            }
+17
+         
+18
+         
+19
+          // Check for data factory - need to return 
+20
+         
+21
+         // Else: Non-void method might not return a value or might have statement after a return statement 
+22
+         //insert stkList;   
+23
+         return stkListTest;
+24
+     }
+25
+ 
+26
+   
+27
+    
+28
+  /*  // Make Case
+29
+    public static List<case> MakeCase(Integer numToAdd) {
+30
+        
+31
+        List <Case> caseOwners = new List <Case>();
+32
+        List <Case> caseAdd = new List <Case>();
+33
+        List <Case> deletedCasesAlert = new List <Case>();
+34
+        
+ @isTest
+public class StockHandlerInsertDupeTest {
+    
+   	 // Create test data records from scratch!
+	 
+ 	 // Create 5 records by calling testDataFactory. The first [0]will have low stock and the last[4] will not have low stock
+    
+     static testMethod void TestDataFactory() {
+        List<Stock_Item__c> stkList = Test_DataFactory.TestMakeStock(1);
+        List<Stock_Item__c> stkListDupe = Test_DataFactory.TestMakeStock(1);
+       
+        //Perform Test. Wrap in StartTest to give its own Govenor Limits
+        Test.startTest();
+        insert stkList;
+        insert stkListDupe;
+        Test.stopTest();
+
+         //Dont put Id in  SELECT clause, apex DOESNT LIKE IT!!
+        List<Stock_Item__c> insertedStock = [SELECT Item_Name__c 
+                                      FROM Stock_Item__c 
+                                      WHERE Id IN :stkListDupe];
+		
+   		 // Assert that the Item_Name__c field contains the proper value
+  	   for(Stock_Item__c s : insertedStock){
+       System.assertEquals( 'Food0- Duplicate Item', s.Item_Name__c);
+    }
+         
+         
+  }      
+    
+    //Add 10 records and then add them again + 1 so that 10 will be duplicates and 1 will not
+    
+   static testMethod void TestDataFactory_PosNeg() {
+        List<Stock_Item__c> stkList = Test_DataFactory.TestMakeStock(10);
+        List<Stock_Item__c> stkListDupe = Test_DataFactory.TestMakeStock(11);
+       
+        //Perform Test. Wrap in StartTest to give its own Govenor Limits
+        Test.startTest();
+        insert stkList;
+        insert stkListDupe;
+        Test.stopTest();
+
+        List<Stock_Item__c> insertedStock2 = [SELECT Item_Name__c 
+                                     		  FROM Stock_Item__c 
+                                     		  WHERE Id IN :stkListDupe];
+		
+        // Assert that the Item_Name__c field contains the proper value
+
+        System.assertEquals('Food0- Duplicate Item',  insertedStock2[0].Item_Name__c);
+        System.assertEquals('Food10',  insertedStock2[10].Item_Name__c);
+       
+    }
+   
+}
+}
